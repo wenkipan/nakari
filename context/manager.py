@@ -78,11 +78,44 @@ class ContextManager:
         # TODO: Implement "Summary" strategy as per README using LLM
         # Current simplified implementation: Pop the oldest user/assistant exchanges
         # Keep distinct system prompt if we had one (not handled here specifically yet)
-        
         key = self._get_key(session_id)
-        # Remove oldest 5 messages to free up space
-        self.redis.lpop(key, 5)
-        print(f"Context for {session_id} compressed (truncated).")
+        while self.redis.llen(key) > self.max_history_len:
+            self.redis.lpop(key)
+
+    def set_active_persona(self, session_id: str, persona_name: str):
+        """
+        Sets the active persona for a session.
+        """
+        key = f"nakari:persona:{session_id}"
+        self.redis.set(key, persona_name)
+    
+    def get_active_persona(self, session_id: str) -> str:
+        """
+        Gets the active persona name for a session. Defaults to 'default'.
+        """
+        key = f"nakari:persona:{session_id}"
+        name = self.redis.get(key)
+        return name if name else "default"
+
+    def get_persona_template(self, name: str) -> Optional[Dict]:
+        """
+        Retrieves a persona template from Redis cache.
+        """
+        key = f"nakari:persona_template:{name}"
+        data = self.redis.get(key)
+        try:
+            return json.loads(data) if data else None
+        except json.JSONDecodeError:
+            self.redis.delete(key)
+            return None
+
+    def set_persona_template(self, name: str, data: Dict):
+        """
+        Caches a persona template in Redis for unified management.
+        TTL: 24 hours (or update manually).
+        """
+        key = f"nakari:persona_template:{name}"
+        self.redis.set(key, json.dumps(data), ex=3600*24)
 
     def clear_context(self, session_id: str):
         key = self._get_key(session_id)

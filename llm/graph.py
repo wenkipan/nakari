@@ -34,15 +34,29 @@ class NakariState(TypedDict):
 # 2. Node: Memory Retrieval
 def retrieve_long_term_memory(state: NakariState):
     from context.manager import context_manager
+    from utils.persona import persona_loader
+    
     user_id = state["user_id"]
     
-    # Retrieve Insights (Long Term Memory)
+    # 1. Load Persona
+    persona_name = context_manager.get_active_persona(user_id)
+    persona_data = persona_loader.load_persona(persona_name)
+    
+    if persona_data:
+        base_prompt = persona_loader.format_persona_prompt(persona_data)
+        print(f"\n🎭 [Persona Loaded] Using template: '{persona_name}'")
+    else:
+        # Fallback
+        base_prompt = (
+            "You are Nakari, an AI with a distinct personality. "
+            "You have memory and reflection capabilities.\n\n"
+        )
+    
+    # 2. Retrieve Insights (Long Term Memory)
     insights = context_manager.get_insights(user_id, limit=5)
     
-    # Base System Prompt
-    system_prompt_content = (
-        "You are Nakari, an AI with a distinct personality. "
-        "You have memory and reflection capabilities.\n\n"
+    # 3. Construct Meta Instructions
+    meta_instruction = (
         "META-INSTRUCTION:\n"
         "If the user shares NEW, IMPORTANT information (e.g., name, preferences, life events, strong emotions) "
         "that you think should be permanently remembered or analyzed, you MUST start your response with the tag: [[REFLECT]].\n"
@@ -50,13 +64,13 @@ def retrieve_long_term_memory(state: NakariState):
         "Example:\n"
         "User: 'My name is Wenki.'\n"
         "Nakari: '[[REFLECT]] Nice to meet you, Wenki...'\n"
-        "User: 'What's up?'\n"
-        "Nakari: 'Not much...'"
     )
+    
+    system_prompt_content = f"{base_prompt}\n{meta_instruction}"
     
     if insights:
         # Debug Print for CLI visualization
-        print(f"\n🧠 [Internal Thought] Retrieved Insights from Hippocampus:")
+        print(f"🧠 [Internal Thought] Retrieved Insights from Hippocampus:")
         for idx, i in enumerate(insights):
             print(f"   {idx+1}. {i}")
         print(f"   ------------------------------------------------\n")
@@ -64,7 +78,7 @@ def retrieve_long_term_memory(state: NakariState):
         insight_text = "\n".join([f"- {i}" for i in insights])
         system_prompt_content += f"\n\nInternal Reflection Insights (use these to personalize response):\n{insight_text}"
     else:
-        print(f"\n🧠 [Internal Thought] No existing insights found in long-term memory.\n")
+        print(f"🧠 [Internal Thought] No existing insights found in long-term memory.\n")
         system_prompt_content += "\n\nNo specific long-term insights yet."
 
     return {"messages": [SystemMessage(content=system_prompt_content)]}
