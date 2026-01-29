@@ -11,18 +11,11 @@ def db_index(request):
     """Assign random DB index between 9-15 for class-level isolation"""
     return request.param
 
-# Mock Redis fixture for unit tests - uses a separate DB for isolation
+# Mock Redis URL fixture for unit tests
 @pytest.fixture
-def mock_redis():
-    """Create an in-memory Redis client for testing"""
-    # Create a unique DB index for this fixture instance
-    db_idx = 9
-    r = redis.Redis(host="localhost", port=6379, db=db_idx, decode_responses=True)
-    try:
-        r.flushdb()
-        yield r
-    finally:
-        r.flushdb()
+def mock_redis_url():
+    """Provide a Redis URL for ContextManager (DB 9 for isolation)"""
+    return "redis://localhost:6379/9"
 
 # Persona fixtures
 @pytest.fixture
@@ -47,6 +40,16 @@ def mock_context_manager():
     """Mock context_manager for testing"""
     from unittest.mock import MagicMock
     return MagicMock()
+
+# Mock Redis client fixture
+@pytest.fixture
+def mock_redis():
+    """Create an in-memory Redis client for testing"""
+    import redis
+    r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+    r.flushdb()
+    yield r
+    r.flushdb()
 
 # Redis state assertion helpers
 def assert_redis_state(redis_client, expected_keys: dict):

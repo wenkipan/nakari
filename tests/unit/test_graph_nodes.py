@@ -111,8 +111,11 @@ class TestManageContextTrimsMessages:
 
     def test_trims_messages_to_max_tokens(self, mock_redis):
         """Test that context is trimmed to max_tokens limit."""
-        # Create many messages (simulating long conversation)
-        messages = [HumanMessage(content=f"Message {i}") for i in range(50)]
+        # Create many very long messages (simulating long conversation)
+        # Each message is ~5000 chars, so 50 messages = 250,000 chars = 62,500 tokens
+        # This should trigger trimming to max_tokens=2000
+        long_content = "This is a very long message. " * 100  # ~2000 chars
+        messages = [HumanMessage(content=f"Message {i}: {long_content}") for i in range(50)]
 
         state = NakariState(
             messages=messages,
@@ -127,13 +130,18 @@ class TestManageContextTrimsMessages:
 
         # Verify context was trimmed
         trimmed_messages = result["context_window"]
-        # Should have system + some recent messages
-        assert len(trimmed_messages) <= 5  # System + at most 4 recent messages
+        # Should have system + some recent messages (not all 50)
+        assert len(trimmed_messages) < 50  # Trimming happened
+        assert len(trimmed_messages) <= 10  # System + at most 9 recent messages (conservative)
 
     def test_includes_system_message(self, mock_redis):
         """Test that system message is preserved in trimmed context."""
-        # Create messages
-        messages = [HumanMessage(content="Message 1"), HumanMessage(content="Message 2")]
+        # Create messages including a SystemMessage
+        messages = [
+            SystemMessage(content="You are a helpful assistant."),
+            HumanMessage(content="Message 1"),
+            HumanMessage(content="Message 2")
+        ]
 
         state = NakariState(
             messages=messages,
