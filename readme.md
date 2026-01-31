@@ -126,8 +126,8 @@ output：自然语言
 *   CLI 终端提供实时交互界面
 
 ---
-
-## 离散原子网络 (Discrete Atom Network) （memory） - [计划重构]
+!!! 注意：离散原子网络的原设计已被废弃，memory架构的第二版设计在arc.md
+## 离散原子网络 (Discrete Atom Network) （memory） - [计划重构]!!!
 
 **当前状态**: 
 *   **v1 (Current)**: 使用 Redis 列表存储短期记忆和 Insights。
