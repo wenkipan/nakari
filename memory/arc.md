@@ -53,6 +53,7 @@ Fact: "Wenki在熬夜"
 
 | 连接 | 语义 |
 |------|------|
+| Concept ↔ Concept | 概念间的语义关联/聚类 |
 | Fact ↔ Concept | 概念参与了该事实 |
 | Fact ↔ Fact | 时间/逻辑关联（因果、连续发生） |
 | Emotion ↔ Fact | 对该事实的情绪（当前反应） |
@@ -133,8 +134,13 @@ final_score = (
 检索完成后，对 Top-K 原子：
 
 1. **节点更新**：`on_access(atom, decay_rate, boost)`
-2. **Hebbian 边增强**：Top-K 内两两之间的边 `on_access(link, ...)`
+2. **Hebbian 边更新**：Top-K 内符合连接类型的原子对
+   - 已有边：`on_access(link, decay_rate, boost)`
+   - 无边且允许自动建边：`create_link(a, b, weight=boost)`
 3. **时间戳更新**：所有被访问的节点和边
+
+**允许自动建边的类型**：
+- Concept ↔ Concept ✓
 
 ---
 
