@@ -133,6 +133,25 @@ output：自然语言
 *   **v1 (Current)**: 使用 Redis 列表存储短期记忆和 Insights。
 *   **v2 (Planned)**: 迁移至 Neo4j 实现下述的原子网络结构。
 
+### DAN Memory v2 (Neo4j)
+
+This repo includes a standalone v2 memory module in `memory/` (Python package). It is not yet wired into the chat graph by default.
+
+Local setup:
+
+```bash
+docker compose up -d neo4j
+```
+
+Env vars:
+
+```bash
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=password
+DAN_EMBEDDING_DIM=1536
+```
+
 **愿景**：与 Nakari 的所有交互都应被保存，时间的流逝和交流是可以累积的。
 为解决 LLM Context Window 的限制，防止 Token 超长，我们采用特殊的存储结构来简化对话储存并影响 Nakari 的言语性格。
 

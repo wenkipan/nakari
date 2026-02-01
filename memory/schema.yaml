@@ -1,0 +1,140 @@
+# DAN Memory Schema v2
+# Discrete Atom Network 数据结构与接口定义
+
+# =============================================================================
+# 数据结构
+# =============================================================================
+
+Atom:
+  content: string                    # 核心内容
+  embedding: float[]                 # 向量表示
+  type: fact | concept | emotion     # 原子类型
+  strength: float [0.0, 1.0]         # 激活强度
+  timestamp: datetime                # 上次激活时间
+  extensions: map<string, any>       # 可选扩展
+
+Link:
+  source: string                     # 源原子标识
+  target: string                     # 目标原子标识
+  weight: float [0.0, 1.0]           # 边权重
+  timestamp: datetime                # 上次激活时间
+
+AtomTypes:
+  fact:     # 事件/陈述，包含完整语义
+  concept:  # 语义锚点，抽象实体/概念
+  emotion:  # 情绪节点，strength 表示当前激活程度
+
+LinkTypes:
+  - concept ↔ concept    # 概念间的语义关联/聚类
+  - fact ↔ concept       # 概念参与了该事实
+  - fact ↔ fact          # 时间/逻辑关联
+  - emotion ↔ fact       # 对该事实的情绪反应
+  - emotion ↔ concept    # 对该概念的情绪倾向（人格）
+
+# =============================================================================
+# 参数配置
+# =============================================================================
+
+DecayRates:
+  atom:
+    fact: 0.01           # 记忆会淡忘
+    concept: 0.005       # 概念相对稳定
+    emotion: 0.05        # 情绪波动快
+  link:
+    default: 0.005       # 普通边，稳定
+    emotion: 0.001       # 情绪边（人格），非常稳定
+
+Boost:
+  unified: 0.05          # 所有场景使用相同 boost
+
+RetrievalWeights:        # 由调用方传入
+  semantic_similarity: float   # w1: 语义相似度
+  node_strength: float         # w2: 节点强度
+  edge_weight: float           # w3: 边权重
+  emotion_boost: float         # w4: 情绪关联强度
+  time_factor: float           # w5: 时间因子
+
+# =============================================================================
+# 接口定义（抽象）
+# =============================================================================
+
+Interfaces:
+
+  # --- 原子操作 ---
+  create_atom:
+    input:  { content, type, embedding?, strength?, extensions? }
+    output: Atom
+    note:   strength 默认为 Boost.unified
+
+  get_atom:
+    input:  { content }
+    output: Atom | null
+
+  # --- 边操作 ---
+  create_link:
+    input:  { source, target, weight? }
+    output: Link
+    note:   weight 优先级：传入值 > Boost.unified
+
+  get_link:
+    input:  { source, target }
+    output: Link | null
+
+  # --- 核心规则 ---
+  on_access:
+    input:  { obj, decay_rate, boost }
+    effect: 衰减 → 增强 → 更新时间戳
+
+  # --- 检索 ---
+  retrieve:
+    input:  { query, weights, top_k }
+    output: Atom[]
+    steps:
+      - 并行检索（语义/情绪/关键词）
+      - 边扩散 1-2 跳
+      - 统一排序
+      - 返回 Top-K
+
+  # --- 检索后更新 ---
+  update_after_retrieval:
+    input:  { top_k_atoms, boost }
+    effect:
+      - 对每个原子: on_access
+      - 对 Concept 对: 有边则增强，无边则新建
+
+  # --- 人格初始化 ---
+  init_personality:
+    input:  { config: PersonaConfig }
+    effect:
+      - 创建 12 个 Emotion 原子，strength 随机初始化
+      - 创建偏好 Concept 原子及其与 Emotion 的边
+      - 创建人设 Fact 原子及其与 Emotion 的边
+
+# =============================================================================
+# 人格配置
+# =============================================================================
+
+PersonaConfig:
+  emotions:
+    init_range: [0.3, 0.7]          # strength 随机范围
+    types:
+      - happy
+      - sad
+      - anger
+      - fear
+      - surprise
+      - disgust
+      - love
+      - trust
+      - anticipation
+      - curiosity
+      - calm
+      - anxiety
+
+  preferences?:                      # 可选：偏好注入
+    concepts:
+      - content: string
+        emotions: map<emotion, weight>
+    facts:
+      - content: string
+        emotions: map<emotion, weight>
