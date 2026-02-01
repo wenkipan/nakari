@@ -1,0 +1,2 @@
+ATOM_LABEL = "Atom"
+LINK_REL_TYPE = "LINK"
