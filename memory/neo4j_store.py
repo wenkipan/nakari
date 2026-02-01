@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional, Tuple
 
 from neo4j import GraphDatabase
 
@@ -103,3 +103,46 @@ class Neo4jMemoryStore:
                 weight=float(rel.get("weight") or 0.0),
                 timestamp=datetime.fromisoformat(rel.get("timestamp")),
             )
+
+    def ensure_vector_index(self) -> None:
+        with self._driver.session() as s:
+            s.run(
+                "CREATE VECTOR INDEX atom_embedding_index IF NOT EXISTS "
+                "FOR (a:%s) ON (a.embedding) "
+                "OPTIONS {indexConfig: {`vector.dimensions`: $dim, `vector.similarity_function`: 'cosine'}}"
+                % ATOM_LABEL,
+                dim=int(self._cfg.dan_embedding_dim),
+            )
+
+    def vector_search(
+        self, embedding: List[float], k: int
+    ) -> List[Tuple[object, float]]:
+        with self._driver.session() as s:
+            res = s.run(
+                "CALL db.index.vector.queryNodes('atom_embedding_index', $k, $embedding) "
+                "YIELD node, score RETURN node, score",
+                k=int(k),
+                embedding=embedding,
+            )
+            return [(r["node"], float(r["score"])) for r in res]
+
+    def neighbors_1hop(self, content: str, limit: int = 50) -> List[object]:
+        with self._driver.session() as s:
+            res = s.run(
+                "MATCH (a:%s {content:$content})-[:%s]-(b:%s) RETURN b LIMIT $limit"
+                % (ATOM_LABEL, LINK_REL_TYPE, ATOM_LABEL),
+                content=content,
+                limit=int(limit),
+            )
+            return [r["b"] for r in res]
+
+    def _node_to_atom(self, node: object) -> Atom:
+        ext_raw = node.get("extensions") or "{}"
+        return Atom(
+            content=node["content"],
+            embedding=list(node.get("embedding") or []),
+            type=node.get("type"),
+            strength=float(node.get("strength") or 0.0),
+            timestamp=datetime.fromisoformat(node.get("timestamp")),
+            extensions=json.loads(ext_raw),
+        )
