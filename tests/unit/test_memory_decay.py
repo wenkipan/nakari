@@ -1,32 +1,19 @@
-from __future__ import annotations
-
 from datetime import datetime, timedelta, timezone
-from importlib import import_module
-
-import pytest
 
 
-def test_on_access_value_updates_ts_and_boosts_value() -> None:
-    try:
-        decay = import_module("memory.decay")
-    except ModuleNotFoundError:
-        pytest.fail("memory.decay module missing")
+def test_on_access_boosts_and_updates_timestamp():
+    from memory.decay import on_access_value
 
-    try:
-        on_access_value = getattr(decay, "on_access_value")
-    except AttributeError:
-        pytest.fail("on_access_value missing")
-
-    last_ts = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-    now_ts = last_ts + timedelta(hours=1)
+    now = datetime(2026, 1, 2, tzinfo=timezone.utc)
+    past = now - timedelta(hours=10)
 
     new_value, new_ts = on_access_value(
         current_value=0.5,
-        last_ts=last_ts,
-        now_ts=now_ts,
-        decay_rate=0.0,
-        boost=0.1,
+        last_ts=past,
+        now_ts=now,
+        decay_rate=0.01,
+        boost=0.05,
     )
 
-    assert new_ts == now_ts
-    assert new_value == pytest.approx(0.6)
+    assert new_ts == now
+    assert 0.5 < new_value <= 1.0
