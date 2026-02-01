@@ -7,8 +7,8 @@ from typing import Optional
 from neo4j import GraphDatabase
 
 from memory.config import MemoryConfig
-from memory.constants import ATOM_LABEL
-from memory.models import Atom
+from memory.constants import ATOM_LABEL, LINK_REL_TYPE
+from memory.models import Atom, Link
 
 
 class Neo4jMemoryStore:
@@ -64,4 +64,42 @@ class Neo4jMemoryStore:
                 strength=float(node.get("strength") or 0.0),
                 timestamp=datetime.fromisoformat(node.get("timestamp")),
                 extensions=json.loads(ext_raw),
+            )
+
+    def create_link(
+        self,
+        source: str,
+        target: str,
+        *,
+        weight: float,
+        timestamp: datetime,
+    ) -> None:
+        with self._driver.session() as s:
+            s.run(
+                "MATCH (a:%s {content: $source}), (b:%s {content: $target}) "
+                "MERGE (a)-[r:%s]-(b) "
+                "SET r.weight = $weight, r.timestamp = $timestamp"
+                % (ATOM_LABEL, ATOM_LABEL, LINK_REL_TYPE),
+                source=source,
+                target=target,
+                weight=float(weight),
+                timestamp=timestamp.isoformat(),
+            )
+
+    def get_link(self, source: str, target: str) -> Optional[Link]:
+        with self._driver.session() as s:
+            rec = s.run(
+                "MATCH (a:%s {content: $source})-[r:%s]-(b:%s {content: $target}) RETURN r"
+                % (ATOM_LABEL, LINK_REL_TYPE, ATOM_LABEL),
+                source=source,
+                target=target,
+            ).single()
+            if not rec:
+                return None
+            rel = rec["r"]
+            return Link(
+                source=source,
+                target=target,
+                weight=float(rel.get("weight") or 0.0),
+                timestamp=datetime.fromisoformat(rel.get("timestamp")),
             )
