@@ -1,4 +1,4 @@
-﻿## Nakari
+## Nakari
 
 Nakari 是一个拥有独立人格的 AI，拥有自己的记忆库。
 
@@ -12,12 +12,65 @@ Nakari 是一个拥有独立人格的 AI，拥有自己的记忆库。
 
 目前 Nakari 处于 MVP 阶段，通过命令行界面 (CLI) 进行交互。
 
-### 1. 环境准备
+### 方式一：Docker 一键启动 (推荐)
+
+Docker 方式自动配置 Neo4j 5.23 (支持 4096 维向量)、Redis 和应用环境。
+
+**前置条件**：
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows/Mac) 或 Docker Engine (Linux)
+- 至少 4GB 可用内存
+
+**Windows (PowerShell)**：
+```powershell
+# 1. 配置 API 密钥
+cp .env.example .env
+# 编辑 .env 填入 EMBEDDING_API_KEY 和 LLM_API_KEY
+
+# 2. 一键启动
+.\scripts\docker-start.ps1 start
+
+# 3. 运行演示
+.\scripts\docker-start.ps1 demo
+
+# 其他命令
+.\scripts\docker-start.ps1 stop     # 停止服务
+.\scripts\docker-start.ps1 shell    # 进入容器
+.\scripts\docker-start.ps1 test     # 运行测试
+.\scripts\docker-start.ps1 logs     # 查看日志
+.\scripts\docker-start.ps1 clean    # 清理数据
+```
+
+**Linux/Mac (Bash)**：
+```bash
+# 1. 配置 API 密钥
+cp .env.example .env
+# 编辑 .env 填入 EMBEDDING_API_KEY 和 LLM_API_KEY
+
+# 2. 一键启动
+chmod +x scripts/docker-start.sh
+./scripts/docker-start.sh start
+
+# 3. 运行演示
+./scripts/docker-start.sh demo
+```
+
+**访问服务**：
+- Neo4j Browser: http://localhost:7474 (用户名: `neo4j`, 密码: `password123`)
+- 应用容器: `docker compose exec app bash`
+
+详细文档见 [docs/docker-setup.md](docs/docker-setup.md)
+
+---
+
+### 方式二：本地安装
+
+#### 1. 环境准备
 确保已安装：
 *   Python 3.10+
-*   Redis (作为消息队列和记忆存储，Windows 可使用 WSL 或 Docker 运行)
+*   Neo4j 5.23+ (用于记忆存储，需支持 4096 维向量索引)
+*   Redis (作为消息队列)
 
-### 2. 安装依赖
+#### 2. 安装依赖
 ```bash
 # 推荐使用 Conda 创建环境
 conda create -n nakari python=3.10
@@ -31,14 +84,26 @@ pip install -r requirements_audio.txt
 pip install -r requirements_cli.txt
 ```
 
-### 3. 配置
-复制 `.env.example` 为 `.env` 并填入必要 Key：
+#### 3. 配置
+复制 `.env.example` 为 `.env` 并填入配置：
 ```bash
-OPENAI_API_KEY=sk-xxxx  # 支持 OpenAI 格式的 API (如 MiniMax)
-OPENAI_API_BASE=https://api.minimax.chat/v1  # 如果使用其他服务商
+# Embedding API (支持 OpenAI 兼容格式)
+EMBEDDING_API_BASE=https://open.bigmodel.cn/api/paas/v4
+EMBEDDING_API_KEY=your_key_here
+EMBEDDING_MODEL=embedding-3
+
+# LLM API (支持 OpenAI 兼容格式)
+LLM_API_BASE=https://open.bigmodel.cn/api/paas/v4
+LLM_API_KEY=your_key_here
+LLM_MODEL=glm-4
+
+# Neo4j
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=password123
 ```
 
-### 4. 启动系统
+#### 4. 启动系统
 为了获得完整体验（包含后台反思功能），建议启动两个终端。
 
 **终端 1：启动 Celery Worker (大脑后台)**
@@ -55,7 +120,7 @@ celery -A tasks.app worker --loglevel=info
 python scripts/cli_chat.py
 ```
 
-### 5. 如何交互
+#### 5. 如何交互
 *   **文字对话**：直接输入文字并回车。
 *   **语音对话**：按住 **空格键 (Space)** 说话，松开即发送 (需安装 Audio 依赖)。
 *   **指令**：
@@ -127,11 +192,45 @@ output：自然语言
 
 ---
 
-## 离散原子网络 (Discrete Atom Network) （memory） - [计划重构]
+## 离散原子网络 (Discrete Atom Network) - Memory Module
 
 **当前状态**: 
-*   **v1 (Current)**: 使用 Redis 列表存储短期记忆和 Insights。
-*   **v2 (Planned)**: 迁移至 Neo4j 实现下述的原子网络结构。
+*   **v1 (Legacy)**: 使用 Redis 列表存储短期记忆和 Insights。
+*   **v2 (已完成)**: 基于 Neo4j 的离散原子网络 (DAN) 记忆系统。
+
+### 已实现模块 (140 测试通过)
+
+| 模块 | 文件 | 功能 |
+|------|------|------|
+| **Models** | `memory/models.py` | Atom, Edge, AtomType, DecayRates, BoostValues, RetrievalConfig |
+| **Embedding** | `memory/embedding.py` | OpenAI 兼容的 Embedding Provider (支持智谱、OpenAI 等) |
+| **Decay** | `memory/decay.py` | 艾宾浩斯遗忘曲线实现: `apply_decay()`, `boost_atom()`, `boost_edge()` |
+| **Store** | `memory/store.py` | Neo4j 存储层: CRUD、向量搜索、图遍历 |
+| **DAN** | `memory/dan.py` | 记忆系统入口: `create_atom()`, `insert_data()`, `retrieve()`, `boost()` |
+| **Personality** | `memory/personality.py` | 人格初始化: 12 种基础情绪、偏好设置、YAML 配置加载 |
+| **Config** | `memory/config.py` | 统一配置: EmbeddingConfig, LLMConfig, Neo4jConfig |
+
+### 核心特性
+
+- **12 种基础情绪**: happy, sad, anger, fear, surprise, disgust, love, trust, anticipation, curiosity, calm, anxiety
+- **记忆衰减**: 基于艾宾浩斯遗忘曲线的权重衰减 (FACT=0.01, CONCEPT=0.005, EMOTION=0.05)
+- **向量搜索**: 支持 4096 维向量 (embedding-3-pro) 或 2048 维 (embedding-3)
+- **多索引查询**: 跨 Fact/Concept/Emotion 类型的统一向量检索
+
+### 运行演示
+
+```bash
+# Docker 方式
+.\scripts\docker-start.ps1 demo
+
+# 本地方式
+python scripts/demo_memory.py
+```
+
+### 参考文档
+
+- [Cypher 查询参考](memory/cypher_queries.md) - Neo4j Browser 中常用的查询语句
+- [Docker 部署指南](docs/docker-setup.md) - 一键部署和故障排查
 
 **愿景**：与 Nakari 的所有交互都应被保存，时间的流逝和交流是可以累积的。
 为解决 LLM Context Window 的限制，防止 Token 超长，我们采用特殊的存储结构来简化对话储存并影响 Nakari 的言语性格。
