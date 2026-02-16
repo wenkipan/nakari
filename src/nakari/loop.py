@@ -5,6 +5,7 @@ import asyncio
 import structlog
 
 from nakari.context import ContextManager
+from nakari.journal import JournalStore
 from nakari.llm import LLMClient
 from nakari.mailbox import Mailbox
 from nakari.models import Event
@@ -35,12 +36,14 @@ class ReactLoop:
         registry: ToolRegistry,
         state: LoopState,
         mailbox: Mailbox,
+        journal: JournalStore,
     ) -> None:
         self._llm = llm
         self._context = context
         self._registry = registry
         self._state = state
         self._mailbox = mailbox
+        self._journal = journal
         self._log = structlog.get_logger("loop")
 
     async def run(self) -> None:
@@ -78,6 +81,13 @@ class ReactLoop:
                     content=message.content,
                     tool_calls=tool_calls_raw,
                 )
+                event_id = self._state.current_event.id if self._state.current_event else None
+                await self._journal.log_message(
+                    role="assistant",
+                    content=message.content,
+                    tool_calls=tool_calls_raw,
+                    event_id=event_id,
+                )
 
                 if message.tool_calls:
                     for tc in message.tool_calls:
@@ -91,6 +101,12 @@ class ReactLoop:
                                     f"BUDGET EXCEEDED: {self._state.tool_call_count}/{budget} tool calls used. "
                                     f"You MUST call complete_event or suspend_event now.",
                                 )
+                                await self._journal.log_message(
+                                    role="tool",
+                                    content=f"BUDGET EXCEEDED: {self._state.tool_call_count}/{budget}",
+                                    tool_call_id=tc.id,
+                                    event_id=self._state.current_event.id if self._state.current_event else None,
+                                )
                                 continue
 
                         self._log.info("tool_call", name=tc.function.name, id=tc.id)
@@ -99,22 +115,38 @@ class ReactLoop:
                         )
                         result.tool_call_id = tc.id
                         self._context.add_tool_result(tc.id, result.output)
+                        await self._journal.log_message(
+                            role="tool",
+                            content=result.output,
+                            tool_call_id=tc.id,
+                            event_id=self._state.current_event.id if self._state.current_event else None,
+                        )
                 else:
                     # LLM returned text without tool calls — nudge it
                     self._log.warning(
                         "no_tool_calls",
                         content=(message.content or "")[:100],
                     )
-                    self._context.add_user_message(
+                    nudge = (
                         "You must use tools to take actions. "
                         "If you have no event to process, call check_mailbox. "
                         "If you are done with an event, call complete_event or suspend_event. "
                         "Do not output text without tool calls."
                     )
+                    self._context.add_user_message(nudge)
+                    await self._journal.log_message(
+                        role="user",
+                        content=nudge,
+                        event_id=self._state.current_event.id if self._state.current_event else None,
+                    )
 
             except Exception as e:
                 self._log.error("loop_error", error=str(e), exc_info=True)
-                self._context.add_user_message(
-                    f"[System Error] An error occurred: {e}. Please continue."
+                error_msg = f"[System Error] An error occurred: {e}. Please continue."
+                self._context.add_user_message(error_msg)
+                await self._journal.log_message(
+                    role="user",
+                    content=error_msg,
+                    event_id=self._state.current_event.id if self._state.current_event else None,
                 )
                 await asyncio.sleep(1)

@@ -7,17 +7,19 @@ import structlog
 from nakari.cli import CLI
 from nakari.config import Config
 from nakari.context import ContextManager
+from nakari.journal import JournalStore
 from nakari.llm import LLMClient
 from nakari.loop import LoopState, ReactLoop
 from nakari.mailbox import Mailbox
+from nakari.memory import MemoryStore
 from nakari.models import Event, EventType
 from nakari.prompt import SYSTEM_PROMPT
 from nakari.tool_registry import ToolRegistry
-from nakari.memory import MemoryStore
+from nakari.tools.asr_tools import register_asr_tools
 from nakari.tools.context_tools import register_context_tools
+from nakari.tools.journal_tools import register_journal_tools
 from nakari.tools.mailbox_tools import register_mailbox_tools
 from nakari.tools.memory_tools import register_memory_tools
-from nakari.tools.asr_tools import register_asr_tools
 from nakari.tools.reply_tool import register_reply_tool
 from nakari.tts import TTSPlayer, create_tts_backend
 
@@ -34,6 +36,7 @@ async def run() -> None:
     mailbox = Mailbox()
     llm = LLMClient(config)
     memory = MemoryStore(config)
+    journal = JournalStore()
     context = ContextManager(config)
     context.set_system_prompt(SYSTEM_PROMPT)
     loop_state = LoopState()
@@ -46,6 +49,10 @@ async def run() -> None:
     except Exception as e:
         log.warning("neo4j_unavailable", error=str(e))
 
+    # Journal (SQLite conversation log)
+    await journal.connect(config.journal_db_path)
+    await journal.start_session()
+
     # TTS
     tts_backend = create_tts_backend(config)
     tts_player = TTSPlayer(tts_backend)
@@ -56,9 +63,10 @@ async def run() -> None:
     register_memory_tools(registry, memory, llm)
     register_context_tools(registry, context, llm)
     register_asr_tools(registry, config)
+    register_journal_tools(registry, journal)
 
     # ReAct loop
-    react_loop = ReactLoop(llm, context, registry, loop_state, mailbox)
+    react_loop = ReactLoop(llm, context, registry, loop_state, mailbox, journal)
 
     # Seed event to bootstrap the loop
     await mailbox.put(
@@ -81,6 +89,7 @@ async def run() -> None:
     except* KeyboardInterrupt:
         log.info("nakari_interrupted")
     finally:
+        await journal.close()
         await memory.close()
 
 

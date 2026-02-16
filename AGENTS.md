@@ -1,31 +1,19 @@
 # AGENTS.md - Agentic Coding Guidelines for nakari
 
-This file provides guidelines for agentic coding agents operating in this repository.
-
-## Project Overview
-
-nakari is a Python agent with a persistent memory (Neo4j), a mailbox system for event handling, and a perpetual ReAct loop. The project uses Python 3.12+ with full async/await.
+nakari is a Python agent with a persistent memory (Neo4j), a mailbox system for event handling, and a perpetual ReAct loop. Python 3.12+ with full async/await.
 
 ---
 
 ## Build, Lint, and Test Commands
 
-### Running the Application
-
 ```bash
-# Install dependencies (in virtual environment)
+# Setup
 source .venv/bin/activate
 pip install -e ".[dev]"
 
 # Run the application
 nakari
-```
 
-### Testing
-
-Tests are located in `tests/` directory (create if missing). The project uses `pytest` with `pytest-asyncio`.
-
-```bash
 # Run all tests
 pytest
 
@@ -38,19 +26,12 @@ pytest tests/test_memory.py::test_connect
 # Run tests matching a pattern
 pytest -k "test_connect"
 
-# Run with verbose output
-pytest -v
+# Stop on first failure
+pytest -x
 
 # Run with coverage (if installed)
 pytest --cov=src/nakari --cov-report=term-missing
 ```
-
-### Linting and Type Checking
-
-This project uses standard Python tooling. Configure your editor to use:
-
-- **Ruff** for linting (if added): `ruff check src/`
-- **Mypy** for type checking (if added): `mypy src/`
 
 ---
 
@@ -89,23 +70,12 @@ from nakari.models import Event
 
 - Use Python 3.12+ union syntax: `str | None` instead of `Optional[str]`
 - Use `dict[str, Any]` for generic dictionaries
-- Always include return type annotations: `def foo() -> None:`
-- Use `Any` sparingly; prefer specific types
-
-```python
-# Good
-def process(items: list[str]) -> dict[str, int]: ...
-
-async def query(cypher: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]: ...
-
-# Avoid
-def process(items): ...  # No type hints
-```
+- Always include return type annotations
 
 ### Naming Conventions
 
 - **Classes**: `PascalCase` (e.g., `LLMClient`, `MemoryStore`)
-- **Functions/methods**: `snake_case` (e.g., `connect()`, `async def query()`)
+- **Functions/methods**: `snake_case` (e.g., `connect()`, `query()`)
 - **Private attributes**: leading underscore `_driver`, `_config`
 - **Constants**: `UPPER_SNAKE_CASE` (e.g., `MAX_RETRIES`)
 - **Modules**: `snake_case` (e.g., `memory_tools.py`)
@@ -116,9 +86,6 @@ def process(items): ...  # No type hints
 Use `@dataclass` for data models. Prefer `frozen=True` for immutable config classes.
 
 ```python
-from dataclasses import dataclass, field
-from typing import Any
-
 @dataclass(frozen=True)
 class Config:
     openai_api_key: str
@@ -137,12 +104,9 @@ class Event:
 Use `Enum` with `str` as base for string enums:
 
 ```python
-from enum import Enum
-
 class EventType(str, Enum):
     USER_TEXT = "user_text"
     ASR_TRANSCRIPT = "asr_transcript"
-    TIMER = "timer"
 ```
 
 ### Logging
@@ -151,7 +115,6 @@ Use `structlog` for structured logging:
 
 ```python
 import structlog
-
 logger = structlog.get_logger("component_name")
 
 logger.debug("action_performed", key="value")
@@ -183,31 +146,18 @@ except Exception as e:
 
 - Use `async def` for all functions that perform I/O
 - Always `await` async calls; never use `.result()` or `.wait()`
-- Use `asyncio.get_event_loop()` for executor-based sync operations
-
-```python
-async def fetch_data(url: str) -> dict[str, Any]:
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            return await response.json()
-```
 
 ### Tool Definitions
 
-Tools follow OpenAI function calling schema. Register tools with clear descriptions:
+Tools follow OpenAI function calling schema with `strict: True` and `additionalProperties: False`:
 
 ```python
 registry.register(
     name="tool_name",
-    description="Clear description of what the tool does and when to use it.",
+    description="Clear description of what the tool does.",
     parameters={
         "type": "object",
-        "properties": {
-            "param_name": {
-                "type": "string",
-                "description": "Description of the parameter",
-            },
-        },
+        "properties": {"param_name": {"type": "string", "description": "Description"}},
         "required": ["param_name"],
         "additionalProperties": False,
     },
@@ -237,25 +187,6 @@ src/nakari/
     ├── mailbox_tools.py
     ├── memory_tools.py
     └── reply_tool.py
-```
-
-### Running Tests
-
-```bash
-# All tests
-pytest
-
-# Single test file
-pytest tests/test_memory.py
-
-# Single test function
-pytest tests/test_memory.py::test_schema
-
-# With verbose output
-pytest -v
-
-# Stop on first failure
-pytest -x
 ```
 
 ---
