@@ -32,6 +32,8 @@ class Config:
     tts_player: str
     tavily_api_key: str
     journal_db_path: str
+    timer_db_path: str
+    timer_check_interval_seconds: int
     log_level: str
 
     @classmethod
@@ -62,5 +64,7 @@ class Config:
             tts_player=os.getenv("TTS_PLAYER", "mpv"),
             tavily_api_key=os.getenv("TAVILY_API_KEY", ""),
             journal_db_path=os.getenv("JOURNAL_DB_PATH", "~/.nakari/journal.db"),
+            timer_db_path=os.getenv("TIMER_DB_PATH", "~/.nakari/timers.db"),
+            timer_check_interval_seconds=int(os.getenv("TIMER_CHECK_INTERVAL_SECONDS", "10")),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
         )

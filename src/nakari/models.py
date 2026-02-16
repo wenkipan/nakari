@@ -35,6 +35,7 @@ class Event:
     content: str
     attachments: list[Attachment] = field(default_factory=list)
     max_tool_calls: int = 30
+    priority: int = 0
     metadata: dict[str, Any] = field(default_factory=dict)
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     created_at: float = field(default_factory=time.time)

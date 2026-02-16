@@ -95,12 +95,12 @@ class ReactLoop:
                         if self._state.current_event:
                             self._state.tool_call_count += 1
                             budget = self._state.current_event.max_tool_calls
-                            _BUDGET_EXEMPT = {"complete_event", "suspend_event"}
+                            _BUDGET_EXEMPT = {"mailbox_done", "mailbox_list", "mailbox_wait"}
                             if self._state.tool_call_count > budget and tc.function.name not in _BUDGET_EXEMPT:
                                 self._context.add_tool_result(
                                     tc.id,
                                     f"BUDGET EXCEEDED: {self._state.tool_call_count}/{budget} tool calls used. "
-                                    f"You MUST call complete_event or suspend_event now.",
+                                    f"You MUST call mailbox_done now.",
                                 )
                                 await self._journal.log_message(
                                     role="tool",
@@ -130,8 +130,8 @@ class ReactLoop:
                     )
                     nudge = (
                         "You must use tools to take actions. "
-                        "If you have no event to process, call check_mailbox. "
-                        "If you are done with an event, call complete_event or suspend_event. "
+                        "Use mailbox_list to see your queue, mailbox_pick to start an event, "
+                        "mailbox_done when finished, or mailbox_wait if idle. "
                         "Do not output text without tool calls."
                     )
                     self._context.add_user_message(nudge)

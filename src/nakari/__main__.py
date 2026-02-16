@@ -21,7 +21,9 @@ from nakari.tools.journal_tools import register_journal_tools
 from nakari.tools.mailbox_tools import register_mailbox_tools
 from nakari.tools.memory_tools import register_memory_tools
 from nakari.tools.reply_tool import register_reply_tool
+from nakari.tools.timer_tools import register_timer_tools
 from nakari.tools.web_tools import register_web_tools
+from nakari.timer import TimerStore, run_timer_loop
 from nakari.tts import TTSPlayer, create_tts_backend
 
 
@@ -54,6 +56,10 @@ async def run() -> None:
     await journal.connect(config.journal_db_path)
     await journal.start_session()
 
+    # Timer (SQLite persistent timers)
+    timer_store = TimerStore()
+    await timer_store.connect(config.timer_db_path)
+
     # TTS
     tts_backend = create_tts_backend(config)
     tts_player = TTSPlayer(tts_backend)
@@ -65,6 +71,7 @@ async def run() -> None:
     register_context_tools(registry, context, llm)
     register_asr_tools(registry, config)
     register_journal_tools(registry, journal)
+    register_timer_tools(registry, timer_store)
     if config.tavily_api_key:
         register_web_tools(registry, config)
 
@@ -75,7 +82,7 @@ async def run() -> None:
     await mailbox.put(
         Event(
             type=EventType.SYSTEM,
-            content="System started. You are now active. Call check_mailbox to begin.",
+            content="System started. You are now active. Call mailbox_list to see your queue.",
             max_tool_calls=5,
         )
     )
@@ -87,11 +94,16 @@ async def run() -> None:
         async with asyncio.TaskGroup() as tg:
             tg.create_task(react_loop.run(), name="react_loop")
             tg.create_task(cli.input_loop(), name="cli_input")
+            tg.create_task(
+                run_timer_loop(timer_store, mailbox, config.timer_check_interval_seconds),
+                name="timer_loop",
+            )
     except* SystemExit:
         log.info("nakari_shutting_down")
     except* KeyboardInterrupt:
         log.info("nakari_interrupted")
     finally:
+        await timer_store.close()
         await journal.close()
         await memory.close()
 

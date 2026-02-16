@@ -23,12 +23,12 @@ pytest -x                 # stop on first failure
 
 ## Architecture
 
-nakari is an autonomous AI agent built on a **permanent ReAct loop** with a **mailbox-based event system**. The loop never terminates — it sleeps when the mailbox is empty (via `await asyncio.Queue.get()`) and wakes when new events arrive.
+nakari is an autonomous AI agent built on a **permanent ReAct loop** with a **mailbox-based event system**. The loop never terminates — it sleeps when the mailbox is empty (via `mailbox_wait`) and wakes when new events arrive.
 
 ### Core Loop (`loop.py`)
 
 ```
-check_mailbox (blocks if empty) → LLM call with tools → execute tool calls → repeat
+LLM call with tools → execute tool calls → repeat
 ```
 
 - LLM must always return tool calls; bare text triggers a nudge message
@@ -37,19 +37,25 @@ check_mailbox (blocks if empty) → LLM call with tools → execute tool calls �
 
 ### Mailbox (`mailbox.py` + `tools/mailbox_tools.py`)
 
-All input flows through the mailbox as `Event` objects. nakari processes one event at a time:
-1. `check_mailbox` — dequeue next event (blocks if empty)
-2. Process with any tools
-3. `complete_event` or `suspend_event` — then back to step 1
+All input flows through the mailbox as `Event` objects. The mailbox is a self-orchestrated queue — nakari has full autonomy over event lifecycle:
 
-nakari can also `create_event` (self-scheduling) and `suspend_event` (re-enqueue with progress notes).
+Seven tools give the LLM complete control:
+- `mailbox_list` — inspect all events (filterable by status), sorted by priority
+- `mailbox_add` — create new events with priority and metadata
+- `mailbox_update` — modify any event field (content, priority, status, metadata)
+- `mailbox_delete` — remove events
+- `mailbox_pick` — select an event to start processing (sets current_event, starts budget)
+- `mailbox_done` — finish current event and archive it
+- `mailbox_wait` — block until new events arrive (idle state)
+
+nakari decides its own workflow: which events to process, in what order, whether to merge/split/discard them.
 
 ### Tool System (`tool_registry.py` + `tools/`)
 
 Tools are registered explicitly via `register_*_tools(registry, ...deps)` functions — no decorators. All schemas use OpenAI function calling format with `strict: True` and `additionalProperties: False`.
 
-Four tool categories:
-- **mailbox_tools** — event lifecycle (check/create/suspend/complete)
+Tool categories:
+- **mailbox_tools** — self-orchestrated event queue (list/add/update/delete/pick/done/wait)
 - **memory_tools** — Neo4j Cypher read/write + schema inspection + embeddings
 - **reply_tool** — sole communication channel to user (via injected callback)
 - **context_tools** — active context compression (separate LLM call for summarization)
@@ -66,7 +72,7 @@ Neo4j with **no predefined schema**. nakari decides labels, properties, and rela
 
 ### Wiring (`__main__.py`)
 
-Components are instantiated and wired manually. `asyncio.TaskGroup` runs the ReAct loop and CLI input loop concurrently. A seed `SYSTEM` event bootstraps the first `check_mailbox` call. Neo4j connection failure is non-fatal (warning only).
+Components are instantiated and wired manually. `asyncio.TaskGroup` runs the ReAct loop and CLI input loop concurrently. A seed `SYSTEM` event bootstraps the loop. Neo4j connection failure is non-fatal (warning only).
 
 ### Shared State (`loop.py: LoopState`)
 

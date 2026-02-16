@@ -14,13 +14,13 @@ pip install -e ".[dev]"
 # Run the application
 nakari
 
+# Neo4j (required for memory tools)
+docker compose up -d
+
 # Run all tests
 pytest
 
-# Run a single test file
-pytest tests/test_memory.py
-
-# Run a single test function
+# Run a single test
 pytest tests/test_memory.py::test_connect
 
 # Run tests matching a pattern
@@ -28,9 +28,6 @@ pytest -k "test_connect"
 
 # Stop on first failure
 pytest -x
-
-# Run with coverage (if installed)
-pytest --cov=src/nakari --cov-report=term-missing
 ```
 
 ---
@@ -38,134 +35,65 @@ pytest --cov=src/nakari --cov-report=term-missing
 ## Code Style Guidelines
 
 ### General Principles
-
-- Write clean, readable code with minimal abstraction unless necessary
+- Write clean, readable code with minimal abstraction
 - Prefer explicit over implicit
-- Keep functions focused and small (< 50 lines when possible)
+- Keep functions focused and small (< 50 lines)
 - Use async/await throughout (full async pipeline)
 
 ### Imports
-
-Always use `from __future__ import annotations` at the top of every file. Organize imports in three sections:
-
+Always use `from __future__ import annotations` at the top. Organize in three sections:
 1. Standard library (`asyncio`, `json`, `os`, `typing`, etc.)
 2. Third-party packages (`structlog`, `openai`, `neo4j`, etc.)
 3. Local modules (`from nakari.config import ...`)
 
-```python
-from __future__ import annotations
-
-import asyncio
-import json
-from typing import Any
-
-import structlog
-from openai import AsyncOpenAI
-
-from nakari.config import Config
-from nakari.models import Event
-```
-
 ### Type Annotations
-
 - Use Python 3.12+ union syntax: `str | None` instead of `Optional[str]`
 - Use `dict[str, Any]` for generic dictionaries
 - Always include return type annotations
 
 ### Naming Conventions
-
 - **Classes**: `PascalCase` (e.g., `LLMClient`, `MemoryStore`)
 - **Functions/methods**: `snake_case` (e.g., `connect()`, `query()`)
 - **Private attributes**: leading underscore `_driver`, `_config`
 - **Constants**: `UPPER_SNAKE_CASE` (e.g., `MAX_RETRIES`)
-- **Modules**: `snake_case` (e.g., `memory_tools.py`)
-- **Enums**: `PascalCase` for enum and members (e.g., `EventType.USER_TEXT`)
+- **Enums**: `PascalCase` (e.g., `EventType.USER_TEXT`)
 
 ### Dataclasses
-
-Use `@dataclass` for data models. Prefer `frozen=True` for immutable config classes.
+Use `@dataclass` for data models. Prefer `frozen=True` for immutable config.
 
 ```python
 @dataclass(frozen=True)
 class Config:
     openai_api_key: str
     openai_model: str = "gpt-4o"
-
-@dataclass
-class Event:
-    type: EventType
-    content: str
-    metadata: dict[str, Any] = field(default_factory=dict)
-    id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
 ```
 
 ### Enums
-
-Use `Enum` with `str` as base for string enums:
-
-```python
-class EventType(str, Enum):
-    USER_TEXT = "user_text"
-    ASR_TRANSCRIPT = "asr_transcript"
-```
+Use `Enum` with `str` as base: `class EventType(str, Enum): USER_TEXT = "user_text"`
 
 ### Logging
-
 Use `structlog` for structured logging:
-
 ```python
-import structlog
 logger = structlog.get_logger("component_name")
-
-logger.debug("action_performed", key="value")
-logger.info("component_ready", uri=uri)
-logger.error("operation_failed", error=str(e))
+logger.info("action_performed", key="value")
 ```
 
 ### Error Handling
-
-- Use `assert` for internal invariants (preconditions that should never fail)
+- Use `assert` for internal invariants
 - Use try/except for recoverable errors
 - Always log errors before returning/raising
-- Return error results rather than raising when the caller should handle gracefully
-
-```python
-# For internal invariants
-assert self._driver is not None, "MemoryStore not connected"
-
-# For tool execution (return error result)
-try:
-    result = await tool.handler(**args)
-    return ToolResult(tool_call_id="", output=result, is_error=False)
-except Exception as e:
-    logger.error("tool_execution_error", tool=name, error=str(e))
-    return ToolResult(tool_call_id="", output=f"Error: {e}", is_error=True)
-```
+- Return error results rather than raising when caller handles gracefully
 
 ### Async/Await
-
 - Use `async def` for all functions that perform I/O
 - Always `await` async calls; never use `.result()` or `.wait()`
 
 ### Tool Definitions
+Tools use OpenAI function calling schema with `strict: True` and `additionalProperties: False`.
 
-Tools follow OpenAI function calling schema with `strict: True` and `additionalProperties: False`:
+---
 
-```python
-registry.register(
-    name="tool_name",
-    description="Clear description of what the tool does.",
-    parameters={
-        "type": "object",
-        "properties": {"param_name": {"type": "string", "description": "Description"}},
-        "required": ["param_name"],
-        "additionalProperties": False,
-    },
-    handler=async_handler_function,
-)
-```
-
-### File Organization
+## File Organization
 
 ```
 src/nakari/
