@@ -21,6 +21,7 @@ from nakari.tools.journal_tools import register_journal_tools
 from nakari.tools.mailbox_tools import register_mailbox_tools
 from nakari.tools.memory_tools import register_memory_tools
 from nakari.tools.reply_tool import register_reply_tool
+from nakari.tools.web_tools import register_web_tools
 from nakari.tts import TTSPlayer, create_tts_backend
 
 
@@ -64,6 +65,8 @@ async def run() -> None:
     register_context_tools(registry, context, llm)
     register_asr_tools(registry, config)
     register_journal_tools(registry, journal)
+    if config.tavily_api_key:
+        register_web_tools(registry, config)
 
     # ReAct loop
     react_loop = ReactLoop(llm, context, registry, loop_state, mailbox, journal)

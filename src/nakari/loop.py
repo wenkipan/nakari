@@ -95,7 +95,8 @@ class ReactLoop:
                         if self._state.current_event:
                             self._state.tool_call_count += 1
                             budget = self._state.current_event.max_tool_calls
-                            if self._state.tool_call_count > budget:
+                            _BUDGET_EXEMPT = {"complete_event", "suspend_event"}
+                            if self._state.tool_call_count > budget and tc.function.name not in _BUDGET_EXEMPT:
                                 self._context.add_tool_result(
                                     tc.id,
                                     f"BUDGET EXCEEDED: {self._state.tool_call_count}/{budget} tool calls used. "

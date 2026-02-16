@@ -30,6 +30,7 @@ class Config:
     tts_gptsov_ref_text: str
     tts_gptsov_ref_lang: str
     tts_player: str
+    tavily_api_key: str
     journal_db_path: str
     log_level: str
 
@@ -59,6 +60,7 @@ class Config:
             tts_gptsov_ref_text=os.getenv("TTS_GPTSOV_REF_TEXT", ""),
             tts_gptsov_ref_lang=os.getenv("TTS_GPTSOV_REF_LANG", "zh"),
             tts_player=os.getenv("TTS_PLAYER", "mpv"),
+            tavily_api_key=os.getenv("TAVILY_API_KEY", ""),
             journal_db_path=os.getenv("JOURNAL_DB_PATH", "~/.nakari/journal.db"),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
         )
